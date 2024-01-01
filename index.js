@@ -95,11 +95,15 @@ app.get('/stores', (req, res) => {
             `).join('')}
           </ul>
           <a href="/add-store">Add Store</a>
+          
+          <!-- Add home button to go back to the homepage -->
+          <br>
+          <a href="/">Home</a>
         </body>
         </html>
       `);
     });
-  });
+});
 
   // Change the GET endpoint for the edit store page
 app.get('/update-store/:sid', (req, res) => {
@@ -193,6 +197,106 @@ app.post('/update-store/:sid', async (req, res) => {
       res.status(500).send('Internal Server Error');
     }
   });
+
+// GET endpoint for the Products page
+app.get('/products', (req, res) => {
+    // Query to retrieve details of all products from the MySQL database
+    const query = `
+        SELECT p.pid, p.productdesc, ps.sid, s.location, ps.price
+        FROM product AS p
+        JOIN product_store AS ps ON p.pid = ps.pid
+        JOIN store AS s ON ps.sid = s.sid
+    `;
+
+    mysqlConnection.query(query, (err, results) => {
+        if (err) {
+            console.error('Error fetching products from MySQL:', err);
+            res.status(500).send('Internal Server Error');
+            return;
+        }
+
+        // Display the details of all products with delete action and a link to the external CSS file
+        res.send(`
+            <html>
+            <head>
+                <link rel="stylesheet" type="text/css" href="/styles.css">
+            </head>
+            <body>
+                <h1>Products Page</h1>
+                <ul>
+                    ${results.map(product => `
+                        <li>
+                            Product ID: ${product.pid}, <!-- Change productid to pid -->
+                            Description: ${product.productdesc}, <!-- Change description to productdesc -->
+                            Store ID: ${product.sid},
+                            Location: ${product.location},
+                            Price: ${product.price},
+                            <a href="/delete-product/${product.pid}">Delete</a> <!-- Change productid to pid -->
+                        </li>
+                    `).join('')}
+                </ul>
+                <!-- Add home button to go back to the homepage -->
+                <br>
+                <a href="/">Home</a>
+            </body>
+            </html>
+        `);
+    });
+});
+
+// DELETE endpoint for deleting a product
+app.get('/delete-product/:productId', (req, res) => {
+    const productId = req.params.productId;
+
+    // Query to delete the product from the MySQL database
+    const deleteQuery = 'DELETE FROM product WHERE pid = ?'; // Change productid to pid
+
+    mysqlConnection.query(deleteQuery, [productId], (err, results) => {
+        if (err) {
+            console.error('Error deleting product from MySQL:', err);
+            res.status(500).send('Internal Server Error');
+            return;
+        }
+
+        res.redirect('/products'); // Redirect back to the products page after deleting
+    });
+});
+
+// GET endpoint for deleting a product
+app.get('/products/delete/:pid', async (req, res) => {
+    const productId = req.params.pid;
+
+    // Check if the product is sold in any store
+    const checkStoresQuery = 'SELECT COUNT(*) AS storeCount FROM product_store WHERE pid = ?';
+    mysqlConnection.query(checkStoresQuery, [productId], async (err, results) => {
+        if (err) {
+            console.error('Error checking product stores in MySQL:', err);
+            res.status(500).send('Internal Server Error');
+            return;
+        }
+
+        const storeCount = results[0].storeCount;
+
+        if (storeCount > 0) {
+            // Product is sold in one or more stores, cannot be deleted
+            res.status(400).send('Product is sold in one or more stores and cannot be deleted.');
+            return;
+        }
+
+        // Product is not sold in any store, proceed with deletion
+        const deleteQuery = 'DELETE FROM product WHERE pid = ?';
+
+        mysqlConnection.query(deleteQuery, [productId], (deleteErr, deleteResults) => {
+            if (deleteErr) {
+                console.error('Error deleting product from MySQL:', deleteErr);
+                res.status(500).send('Internal Server Error');
+                return;
+            }
+
+            res.redirect('/products'); // Redirect back to the products page after successful deletion
+        });
+    });
+});
 
 // Function to check if Manager ID exists in MongoDB
 async function isManagerIdExists(managerId) {
