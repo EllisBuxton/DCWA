@@ -1,6 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const mysql = require('mysql');
+const mysql2 = require('mysql2');
 const { MongoClient, ServerApiVersion } = require('mongodb');
 const { exec } = require('child_process'); // Import exec from child_process
 const uri = "mongodb+srv://g00406866:admin@cluster0.clqcw6z.mongodb.net/?retryWrites=true&w=majority";
@@ -14,7 +14,7 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(express.static('public'));
 
 //configuring mysql database
-const mysqlConnection = mysql.createConnection({
+const mysqlConnection = mysql2.createConnection({
   host: 'localhost',
   user: 'root',
   password: 'admin',
