@@ -2,6 +2,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const mysql = require('mysql');
 const { MongoClient, ServerApiVersion } = require('mongodb');
+const { exec } = require('child_process'); // Import exec from child_process
 const uri = "mongodb+srv://g00406866:admin@cluster0.clqcw6z.mongodb.net/?retryWrites=true&w=majority";
 
 const app = express();
@@ -9,10 +10,10 @@ const PORT = 3000;
 
 app.use(bodyParser.urlencoded({ extended: false }));
 
-// Serve static files from the 'public' directory
+//uses static files from public directory
 app.use(express.static('public'));
 
-// MySQL Database Configuration
+//configuring mysql database
 const mysqlConnection = mysql.createConnection({
   host: 'localhost',
   user: 'root',
@@ -28,7 +29,7 @@ mysqlConnection.connect((err) => {
   console.log('Connected to MySQL database');
 });
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
+//creates a new MongoClient with mongoclientOptions to set the serverApi
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -38,23 +39,24 @@ const client = new MongoClient(uri, {
 });
 async function run() {
   try {
-    // Connect the client to the server (optional starting in v4.7)
-    await client.connect();
-    // Send a ping to confirm a successful connection
+    //pings to confirm the connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
-    // Ensures that the client will close when you finish/error
+    //closes client when finished
     await client.close();
   }
 }
 run().catch(console.dir);
 
-// ExpressJS Routes
+//routes
 
-// Home Page with links to Stores, Products, and Managers (MongoDB)
+//welcome page that links to the stores, products and managers pages
 app.get('/', (req, res) => {
   res.send(`
+  <head>
+    <link rel="stylesheet" type="text/css" href="/styles.css">
+  </head>
     <h1>Welcome to the Home Page</h1>
     <ul>
       <li><a href="/stores">Stores</a></li>
@@ -64,52 +66,60 @@ app.get('/', (req, res) => {
   `);
 });
 
-// GET endpoint for the Stores page
 app.get('/stores', (req, res) => {
-    // Query to retrieve details of all stores from the MySQL database
-    const query = 'SELECT * FROM store';
-  
-    mysqlConnection.query(query, (err, results) => {
+  //retrieves data from the store table
+  const query = 'SELECT * FROM store';
+
+  mysqlConnection.query(query, (err, results) => {
       if (err) {
-        console.error('Error fetching stores from MySQL:', err);
-        res.status(500).send('Internal Server Error');
-        return;
+          console.error('Error fetching stores from MySQL:', err);
+          res.status(500).send('Internal Server Error');
+          return;
       }
-  
-      // Display the details of all stores with a link to the external CSS file
+
+      //displays store details in a table with update link
       res.send(`
-        <html>
-        <head>
-          <link rel="stylesheet" type="text/css" href="/styles.css">
-        </head>
-        <body>
-          <h1>Stores Page</h1>
-          <ul>
-            ${results.map(store => `
-              <li>
-                SID: ${store.sid}, 
-                Location: ${store.location}, 
-                Manager ID: ${store.mgrid},
-                <a href="/update-store/${store.sid}">Update</a>
-              </li>
-            `).join('')}
-          </ul>
-          <a href="/add-store">Add Store</a>
-          
-          <!-- Add home button to go back to the homepage -->
-          <br>
-          <a href="/">Home</a>
-        </body>
-        </html>
+          <html>
+          <head>
+              <link rel="stylesheet" type="text/css" href="/styles.css">
+          </head>
+          <body>
+              <h1>Stores Page</h1>
+              <!-- Home button to go back to the homepage -->
+              <a href="/">Home</a>
+              <table>
+                  <thead>
+                      <tr>
+                          <th>Store ID</th>
+                          <th>Location</th>
+                          <th>Manager ID</th>
+                          <th>Action</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                      ${results.map(store => `
+                          <tr>
+                              <td>${store.sid}</td>
+                              <td>${store.location}</td>
+                              <td>${store.mgrid}</td>
+                              <td><a href="/update-store/${store.sid}">Update</a></td>
+                          </tr>
+                      `).join('')}
+                  </tbody>
+              </table>
+              <a href="/add-store">Add Store</a>
+          </body>
+          </html>
       `);
-    });
+  });
 });
 
-  // Change the GET endpoint for the edit store page
+
+  //get endpoint for updating a store
 app.get('/update-store/:sid', (req, res) => {
     const storeId = req.params.sid;
 
-    // Query to retrieve details of a specific store from the MySQL database
+    //retrieves data from a store with the given storeId
     const query = 'SELECT * FROM store WHERE sid = ?';
   
     mysqlConnection.query(query, [storeId], (err, results) => {
@@ -126,7 +136,7 @@ app.get('/update-store/:sid', (req, res) => {
 
         const store = results[0];
 
-        // Render the edit store page with the store details
+        // displays the edit store page with the store details
         res.send(`
             <html>
             <head>
@@ -158,14 +168,14 @@ app.post('/update-store/:sid', async (req, res) => {
     const storeId = req.params.sid;
     const { location, mgrid } = req.body;
   
-    // Validate input
+    //makes sure the location and mgrid are valid
     if (!location || !mgrid || mgrid.length !== 4) {
       res.status(400).send('Manager ID must be 4 digits long');
       return;
     }
   
     try {
-      // Check if Manager ID exists in MongoDB
+      //checks if the manager id exists in the mongodb
       const isExists = await isManagerIdExists(mgrid);
   
       if (!isExists) {
@@ -173,14 +183,14 @@ app.post('/update-store/:sid', async (req, res) => {
         return;
       }
   
-      // Query to update the store in the MySQL database
+      //updates the store with the given storeId
       const updateQuery = 'UPDATE store SET location = ?, mgrid = ? WHERE sid = ?';
   
       mysqlConnection.query(updateQuery, [location, mgrid, storeId], (err, results) => {
         if (err) {
           console.error('Error updating store in MySQL:', err);
   
-          // Check for the specific error code indicating a duplicate entry
+          //checks for duplicate entry error
           if (err.code === 'ER_DUP_ENTRY') {
             res.status(400).send(`Manager: ${mgrid} is already assigned to a store.`);
 
@@ -190,7 +200,7 @@ app.post('/update-store/:sid', async (req, res) => {
           return;
         }
   
-        res.redirect('/stores'); // Redirect back to the stores page after updating
+        res.redirect('/stores'); //redirects back to the stores page after successful update
       });
     } catch (error) {
       console.error('Error checking Manager ID in MongoDB:', error);
@@ -198,59 +208,156 @@ app.post('/update-store/:sid', async (req, res) => {
     }
   });
 
-// GET endpoint for the Products page
-app.get('/products', (req, res) => {
-    // Query to retrieve details of all products from the MySQL database
-    const query = `
-        SELECT p.pid, p.productdesc, ps.sid, s.location, ps.price
-        FROM product AS p
-        JOIN product_store AS ps ON p.pid = ps.pid
-        JOIN store AS s ON ps.sid = s.sid
-    `;
+  //get endpoint for adding a store
+app.get('/add-store', (req, res) => {
+  res.send(`
+      <html>
+      <head>
+          <link rel="stylesheet" type="text/css" href="/styles.css">
+      </head>
+      <body>
+          <h1>Add Store Page</h1>
+          <!-- Display error messages if any -->
+          <div id="error-message" style="color: red;"></div>
 
-    mysqlConnection.query(query, (err, results) => {
-        if (err) {
-            console.error('Error fetching products from MySQL:', err);
-            res.status(500).send('Internal Server Error');
-            return;
-        }
+          <!-- Form for adding a store -->
+          <form method="post" action="/add-store" onsubmit="return validateStoreForm()">
+              <label for="sid">Store ID:</label>
+              <input type="text" id="sid" name="sid" required>
+              <br>
+              <label for="location">Location:</label>
+              <input type="text" id="location" name="location" required>
+              <br>
+              <label for="mgrid">Manager ID:</label>
+              <input type="text" id="mgrid" name="mgrid" required>
+              <br>
+              <button type="submit">Add Store</button>
+          </form>
 
-        // Display the details of all products with delete action and a link to the external CSS file
-        res.send(`
-            <html>
-            <head>
-                <link rel="stylesheet" type="text/css" href="/styles.css">
-            </head>
-            <body>
-                <h1>Products Page</h1>
-                <ul>
-                    ${results.map(product => `
-                        <li>
-                            Product ID: ${product.pid}, <!-- Change productid to pid -->
-                            Description: ${product.productdesc}, <!-- Change description to productdesc -->
-                            Store ID: ${product.sid},
-                            Location: ${product.location},
-                            Price: ${product.price},
-                            <a href="/delete-product/${product.pid}">Delete</a> <!-- Change productid to pid -->
-                        </li>
-                    `).join('')}
-                </ul>
-                <!-- Add home button to go back to the homepage -->
-                <br>
-                <a href="/">Home</a>
-            </body>
-            </html>
-        `);
-    });
+          <!-- Add home button to go back to the Stores page -->
+          <br>
+          <a href="/stores">Back to Stores Page</a>
+      </body>
+      </html>
+  `);
 });
 
-// DELETE endpoint for deleting a product
+//post endpoint for adding a store
+app.post('/add-store', async (req, res) => {
+  const { sid, location, mgrid } = req.body;
+
+  //make sure input is 5 and 4 characters long
+  if (!sid || !location || !mgrid || sid.length !== 5 || mgrid.length !== 4) {
+      res.status(400).send('Store Id must be 5 characters long and Manager ID must be 4 characters long.');
+      return;
+  }
+
+  try {
+      //checks for manager id in mongodb
+      const isExists = await isManagerIdExists(mgrid);
+
+      if (!isExists) {
+          res.status(400).send(`ManagerID: ${mgrid} does not exist in the MongoDB.`);
+          return;
+      }
+
+      //inserts the store into the mysql database
+      const insertQuery = 'INSERT INTO store (sid, location, mgrid) VALUES (?, ?, ?)';
+
+      mysqlConnection.query(insertQuery, [sid, location, mgrid], (err, results) => {
+          if (err) {
+              console.error('Error adding store to MySQL:', err);
+
+              //checks for duplicate entry error
+              if (err.code === 'ER_DUP_ENTRY') {
+                  res.status(400).send(`Store with SID: ${sid} already exists.`);
+              } else {
+                  res.status(500).send('Internal Server Error');
+              }
+              return;
+          }
+
+          res.redirect('/stores'); //redirects back to the stores page after successful addition
+      });
+  } catch (error) {
+      console.error('Error checking Manager ID in MongoDB:', error);
+      res.status(500).send('Internal Server Error');
+  }
+});
+
+
+//get endpoint for the products page
+app.get('/products', (req, res) => {
+  //retrieve data from the product table
+  const query = `
+      SELECT ps.pid, p.productdesc, ps.sid, s.location, ps.price
+      FROM product_store AS ps
+      LEFT JOIN product AS p ON p.pid = ps.pid
+      LEFT JOIN store AS s ON ps.sid = s.sid
+      UNION
+      SELECT p.pid, p.productdesc, NULL AS sid, NULL AS location, NULL AS price
+      FROM product AS p
+      WHERE NOT EXISTS (
+        SELECT 1 FROM product_store WHERE pid = p.pid
+      )
+  `;
+
+  mysqlConnection.query(query, (err, results) => {
+      if (err) {
+          console.error('Error fetching products from MySQL:', err);
+          res.status(500).send('Internal Server Error');
+          return;
+      }
+
+      //details of all products with delete link
+      res.send(`
+          <html>
+          <head>
+              <link rel="stylesheet" type="text/css" href="/styles.css">
+          </head>
+          <body>
+              <h1>Products Page</h1>
+              <table>
+                  <thead>
+                      <tr>
+                          <th>Product ID</th>
+                          <th>Description</th>
+                          <th>Store ID</th>
+                          <th>Location</th>
+                          <th>Price</th>
+                          <th>Action</th>
+                      </tr>
+                  </thead>
+                  <!-- Add home button to go back to the homepage -->
+              <br>
+              <a href="/">Home</a>
+                  <tbody>
+                      ${results.map(product => `
+                          <tr>
+                              <td>${product.pid}</td>
+                              <td>${product.productdesc || 'N/A'}</td>
+                              <td>${product.sid || 'N/A'}</td>
+                              <td>${product.location || 'N/A'}</td>
+                              <td>${product.price || 'N/A'}</td>
+                              <td><a href="/delete-product/${product.pid}">Delete</a></td>
+                          </tr>
+                      `).join('')}
+                  </tbody>
+              </table>
+          </body>
+          </html>
+      `);
+  });
+});
+
+//delete endpoint for deleting a product
 app.get('/delete-product/:productId', (req, res) => {
     const productId = req.params.productId;
 
-    // Query to delete the product from the MySQL database
-    const deleteQuery = 'DELETE FROM product WHERE pid = ?'; // Change productid to pid
+    //deletes the product with the given productId
+    const deleteQuery = 'DELETE FROM product WHERE pid = ?'; //delete from the product table
 
+    //checks if the product is sold in any store
     mysqlConnection.query(deleteQuery, [productId], (err, results) => {
         if (err) {
             console.error('Error deleting product from MySQL:', err);
@@ -258,15 +365,15 @@ app.get('/delete-product/:productId', (req, res) => {
             return;
         }
 
-        res.redirect('/products'); // Redirect back to the products page after deleting
+        res.redirect('/products'); //redirects back to the products page after successful deletion
     });
 });
 
-// GET endpoint for deleting a product
+//get endpoint for adding a product
 app.get('/products/delete/:pid', async (req, res) => {
     const productId = req.params.pid;
 
-    // Check if the product is sold in any store
+    //checks if the product is sold in any store
     const checkStoresQuery = 'SELECT COUNT(*) AS storeCount FROM product_store WHERE pid = ?';
     mysqlConnection.query(checkStoresQuery, [productId], async (err, results) => {
         if (err) {
@@ -278,12 +385,12 @@ app.get('/products/delete/:pid', async (req, res) => {
         const storeCount = results[0].storeCount;
 
         if (storeCount > 0) {
-            // Product is sold in one or more stores, cannot be deleted
+            //if the product is sold in any store, display an error message
             res.status(400).send('Product is sold in one or more stores and cannot be deleted.');
             return;
         }
 
-        // Product is not sold in any store, proceed with deletion
+        //if the product is not sold in any store, delete the product from the product table
         const deleteQuery = 'DELETE FROM product WHERE pid = ?';
 
         mysqlConnection.query(deleteQuery, [productId], (deleteErr, deleteResults) => {
@@ -293,55 +400,64 @@ app.get('/products/delete/:pid', async (req, res) => {
                 return;
             }
 
-            res.redirect('/products'); // Redirect back to the products page after successful deletion
+            res.redirect('/products'); //redirects back to the products page after successful deletion
         });
     });
 });
 
-// GET endpoint for the Managers (MongoDB) page
+//get endpoint for adding a product
 app.get('/managers', async (req, res) => {
-    try {
-        await client.connect();
+  try {
+      await client.connect();
 
-        const database = client.db("DCWA"); // Replace with your actual MongoDB database name
-        const collection = database.collection("DCWAProj"); // Replace with your actual MongoDB collection name
+      const database = client.db("DCWA"); 
+      const collection = database.collection("DCWAProj");
 
-        // Query to retrieve details of all managers from MongoDB
-        const managers = await collection.find({}).toArray();
+      //retrieve data from the mongodb
+      const managers = await collection.find({}).toArray();
 
-        // Display the details of all managers with a link to the external CSS file
-        res.send(`
-            <html>
-            <head>
-                <link rel="stylesheet" type="text/css" href="/styles.css">
-            </head>
-            <body>
-                <h1>Managers (MongoDB) Page</h1>
-                <ul>
-                    ${managers.map(manager => `
-                        <li>
-                            Manager ID: ${manager._id},
-                            Name: ${manager.name},
-                            Salary: ${manager.salary}
-                        </li>
-                    `).join('')}
-                </ul>
-                <a href="/add-manager">Add Manager (MongoDB)</a>
-                <!-- Add home button to go back to the homepage -->
-                <br>
-                <a href="/">Home</a>
-            </body>
-            </html>
-        `);
-    } catch (error) {
-        console.error('Error fetching managers from MongoDB:', error);
-        res.status(500).send('Internal Server Error');
-    } finally {
-        await client.close();
-    }
+      //details of all managers with add link
+      res.send(`
+          <html>
+          <head>
+              <link rel="stylesheet" type="text/css" href="/styles.css">
+          </head>
+          <body>
+              <h1>Managers (MongoDB) Page</h1>
+              <table>
+                  <thead>
+                      <tr>
+                          <th>Manager ID</th>
+                          <th>Name</th>
+                          <th>Salary</th>
+                      </tr>
+                  </thead>
+                  <!-- Add home button to go back to the homepage -->
+              <br>
+              <a href="/">Home</a>
+                  <tbody>
+                      ${managers.map(manager => `
+                          <tr>
+                              <td>${manager._id}</td>
+                              <td>${manager.name}</td>
+                              <td>${manager.salary}</td>
+                          </tr>
+                      `).join('')}
+                  </tbody>
+              </table>
+              <a href="/add-manager">Add Manager (MongoDB)</a>
+          </body>
+          </html>
+      `);
+  } catch (error) {
+      console.error('Error fetching managers from MongoDB:', error);
+      res.status(500).send('Internal Server Error');
+  } finally {
+      await client.close();
+  }
 });
 
-// GET endpoint for adding a manager (MongoDB)
+//get endpoint for adding a manager
 app.get('/add-manager', (req, res) => {
     res.send(`
         <html>
@@ -375,11 +491,11 @@ app.get('/add-manager', (req, res) => {
     `);
 });
 
-// POST endpoint for adding a manager (MongoDB)
+//post endpoint for adding a manager
 app.post('/managers/add', async (req, res) => {
     const { managerId, name, salary } = req.body;
 
-    // Validate input
+    //if the managerId, name or salary is invalid, display an error message
     if (!isValidManagerId(managerId) || !isValidName(name) || !isValidSalary(salary)) {
         res.status(400).send('Invalid input. Please check the provided values.');
         return;
@@ -388,10 +504,10 @@ app.post('/managers/add', async (req, res) => {
     try {
         await client.connect();
 
-        const database = client.db("DCWA"); // Replace with your actual MongoDB database name
-        const collection = database.collection("DCWAProj"); // Replace with your actual MongoDB collection name
+        const database = client.db("DCWA");
+        const collection = database.collection("DCWAProj");
 
-        // Check if Manager ID is unique
+        //checks if the managerId already exists in MongoDB
         const isUniqueManagerId = await collection.findOne({ _id: managerId });
 
         if (isUniqueManagerId) {
@@ -399,15 +515,14 @@ app.post('/managers/add', async (req, res) => {
             return;
         }
 
-        // Insert the manager into MongoDB
+        //adds the manager to MongoDB
         await collection.insertOne({
             _id: managerId,
             name: name,
-            salary: parseInt(salary),
-            // Add other properties as needed
+            salary: parseInt(salary)
         });
 
-        res.redirect('/managers'); // Redirect back to the Managers (MongoDB) page after successful addition
+        res.redirect('/managers'); //redirects back to the Managers page after successful addition
     } catch (error) {
         console.error('Error adding manager to MongoDB:', error);
         res.status(500).send('Internal Server Error');
@@ -416,37 +531,40 @@ app.post('/managers/add', async (req, res) => {
     }
 });
 
-// Validation functions
+//checks if the managerId is valid
 function isValidManagerId(managerId) {
     return managerId && managerId.length === 4;
 }
-
+//checks if the name is valid
 function isValidName(name) {
     return name && name.length > 5;
 }
-
+//checks if the salary is valid
 function isValidSalary(salary) {
     return salary && !isNaN(salary) && salary >= 30000 && salary <= 70000;
 }
 
 
-// Function to check if Manager ID exists in MongoDB
+//function that checks if the managerId exists in MongoDB
 async function isManagerIdExists(managerId) {
     try {
         await client.connect();
 
-        const database = client.db("DCWA"); // Replace with your actual MongoDB database name
-        const collection = database.collection("DCWAProj"); // Replace with your actual MongoDB collection name
+        const database = client.db("DCWA");
+        const collection = database.collection("DCWAProj");
 
         const manager = await collection.findOne({ _id: managerId });
 
-        return !!manager; // Returns true if the manager with the given ID exists, false otherwise
+        return !!manager;//returns true if manager exists, false otherwise
     } finally {
         await client.close();
     }
 }
 
-// Start the Express server
+//starts the server
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
+
+  //opens the browser when the server starts
+  exec(`start http://localhost:${PORT}`);
 });

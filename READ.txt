@@ -1,0 +1,5 @@
+Node.js and npm are needed to download the dependecies
+
+make sure to run npm install when opening for the first time
+
+use nodemon index.js to run the project and it will open in browser
