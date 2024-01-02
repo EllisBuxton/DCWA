@@ -1,7 +1,5 @@
 Mysql2 (Mysql2 used for better mysql 8.0 compatability) and MongoDb need to be installed on your computer
 
-the mysql database is stored on a mysql server with Hostname: 127.0.0.1 Port: 3306 Username: Root Password: Admin
-
 Node.js and npm are needed to download the dependecies
 
 make sure to run npm install when opening for the first time
