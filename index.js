@@ -254,7 +254,7 @@ app.get('/delete-product/:productId', (req, res) => {
     mysqlConnection.query(deleteQuery, [productId], (err, results) => {
         if (err) {
             console.error('Error deleting product from MySQL:', err);
-            res.status(500).send('Internal Server Error');
+            res.status(500).send(`${productId} is currently in stores and cannot be deleted.`);
             return;
         }
 
@@ -297,6 +297,138 @@ app.get('/products/delete/:pid', async (req, res) => {
         });
     });
 });
+
+// GET endpoint for the Managers (MongoDB) page
+app.get('/managers', async (req, res) => {
+    try {
+        await client.connect();
+
+        const database = client.db("DCWA"); // Replace with your actual MongoDB database name
+        const collection = database.collection("DCWAProj"); // Replace with your actual MongoDB collection name
+
+        // Query to retrieve details of all managers from MongoDB
+        const managers = await collection.find({}).toArray();
+
+        // Display the details of all managers with a link to the external CSS file
+        res.send(`
+            <html>
+            <head>
+                <link rel="stylesheet" type="text/css" href="/styles.css">
+            </head>
+            <body>
+                <h1>Managers (MongoDB) Page</h1>
+                <ul>
+                    ${managers.map(manager => `
+                        <li>
+                            Manager ID: ${manager._id},
+                            Name: ${manager.name},
+                            Salary: ${manager.salary}
+                        </li>
+                    `).join('')}
+                </ul>
+                <a href="/add-manager">Add Manager (MongoDB)</a>
+                <!-- Add home button to go back to the homepage -->
+                <br>
+                <a href="/">Home</a>
+            </body>
+            </html>
+        `);
+    } catch (error) {
+        console.error('Error fetching managers from MongoDB:', error);
+        res.status(500).send('Internal Server Error');
+    } finally {
+        await client.close();
+    }
+});
+
+// GET endpoint for adding a manager (MongoDB)
+app.get('/add-manager', (req, res) => {
+    res.send(`
+        <html>
+        <head>
+            <link rel="stylesheet" type="text/css" href="/styles.css">
+        </head>
+        <body>
+            <h1>Add Manager (MongoDB) Page</h1>
+            <!-- Display error messages if any -->
+            <div id="error-message" style="color: red;"></div>
+
+            <!-- Form for adding a manager -->
+            <form method="post" action="/managers/add" onsubmit="return validateManagerForm()">
+                <label for="managerId">Manager ID:</label>
+                <input type="text" id="managerId" name="managerId" required>
+                <br>
+                <label for="name">Name:</label>
+                <input type="text" id="name" name="name" required>
+                <br>
+                <label for="salary">Salary:</label>
+                <input type="number" id="salary" name="salary" required>
+                <br>
+                <button type="submit">Add Manager</button>
+            </form>
+
+            <!-- Add home button to go back to the Managers (MongoDB) page -->
+            <br>
+            <a href="/managers">Back to Managers (MongoDB) Page</a>
+        </body>
+        </html>
+    `);
+});
+
+// POST endpoint for adding a manager (MongoDB)
+app.post('/managers/add', async (req, res) => {
+    const { managerId, name, salary } = req.body;
+
+    // Validate input
+    if (!isValidManagerId(managerId) || !isValidName(name) || !isValidSalary(salary)) {
+        res.status(400).send('Invalid input. Please check the provided values.');
+        return;
+    }
+
+    try {
+        await client.connect();
+
+        const database = client.db("DCWA"); // Replace with your actual MongoDB database name
+        const collection = database.collection("DCWAProj"); // Replace with your actual MongoDB collection name
+
+        // Check if Manager ID is unique
+        const isUniqueManagerId = await collection.findOne({ _id: managerId });
+
+        if (isUniqueManagerId) {
+            res.status(400).send('Manager ID must be unique.');
+            return;
+        }
+
+        // Insert the manager into MongoDB
+        await collection.insertOne({
+            _id: managerId,
+            name: name,
+            salary: parseInt(salary),
+            // Add other properties as needed
+        });
+
+        res.redirect('/managers'); // Redirect back to the Managers (MongoDB) page after successful addition
+    } catch (error) {
+        console.error('Error adding manager to MongoDB:', error);
+        res.status(500).send('Internal Server Error');
+    } finally {
+        await client.close();
+    }
+});
+
+// Validation functions
+function isValidManagerId(managerId) {
+    return managerId && managerId.length === 4;
+}
+
+function isValidName(name) {
+    return name && name.length > 5;
+}
+
+function isValidSalary(salary) {
+    return salary && !isNaN(salary) && salary >= 30000 && salary <= 70000;
+}
+
 
 // Function to check if Manager ID exists in MongoDB
 async function isManagerIdExists(managerId) {
